@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<!--
+/*
+ * ThreatPulse — Global Cyber Threat Intelligence Dashboard
+ * Built with: HTML5, CSS3, Vanilla JS, Three.js, GSAP, WebGL
+ * Data: Simulated threat intelligence (educational purposes)
+ * Author: Youssef | github.com/youssef-880
+ * License: MIT
+ */
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Global Cyber Threat Intelligence</title>
+<meta name="description" content="Real-time simulated global cyberattack monitoring dashboard with an interactive WebGL globe.">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Three.js r128 + GSAP 3 + ScrollTrigger -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root{
+  --bg:        #080b14;
+  --surface:   #0d1621;
+  --panel:     #0f1923;
+  --border:    rgba(6,182,212,0.15);
+  --accent:    #06b6d4;
+  --danger:    #ff3b3b;
+  --text:      #e2e8f0;
+  --text-2:    #64748b;
+  --font-head: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', sans-serif;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  overflow:hidden;
+  font-size:14px;
+}
+
+/* Custom scrollbars — thin, accent colored */
+::-webkit-scrollbar{ width:5px; height:5px; }
+::-webkit-scrollbar-track{ background:var(--surface); }
+::-webkit-scrollbar-thumb{ background:rgba(6,182,212,0.35); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover{ background:rgba(6,182,212,0.6); }
+*{ scrollbar-width:thin; scrollbar-color:rgba(6,182,212,0.35) var(--surface); }
+
+/* ============================================================
+   LAYOUT GRID — header / 3 columns / ticker
+   ============================================================ */
+#app{
+  display:grid;
+  height:100vh;
+  grid-template-rows:56px 3px 1fr 40px;
+  grid-template-columns:22% 56% 22%;
+  grid-template-areas:
+    "header header header"
+    "scan   scan   scan"
+    "feed   globe  stats"
+    "ticker ticker ticker";
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+header{
+  grid-area:header;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 20px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  will-change:transform,opacity;
+}
+.logo{ display:flex; align-items:center; gap:10px; }
+.logo svg{ width:26px; height:26px; }
+.logo-ring{ transform-origin:center; animation:radarPing 2.4s ease-out infinite; }
+@keyframes radarPing{ 0%{transform:scale(.4);opacity:1;} 100%{transform:scale(1.4);opacity:0;} }
+.logo h1{ font-family:var(--font-head); font-size:20px; font-weight:700; letter-spacing:.5px; }
+.logo h1 span{ color:var(--accent); }
+.header-right{ display:flex; align-items:center; gap:22px; }
+#clock{ font-family:var(--font-mono); font-size:16px; font-weight:500; letter-spacing:1px; }
+.live-badge{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--font-mono); font-size:11px; font-weight:700;
+  color:#22c55e; letter-spacing:2px;
+  border:1px solid rgba(34,197,94,.35); padding:4px 10px; border-radius:4px;
+  background:rgba(34,197,94,.06);
+}
+.live-dot{
+  width:8px; height:8px; border-radius:50%; background:#22c55e;
+  animation:livePulse 1.4s ease-in-out infinite; will-change:transform,opacity;
+}
+@keyframes livePulse{
+  0%,100%{ transform:scale(1); opacity:1; box-shadow:0 0 0 0 rgba(34,197,94,.5); }
+  50%{ transform:scale(1.25); opacity:.75; box-shadow:0 0 8px 2px rgba(34,197,94,.35); }
+}
+.global-counter{ text-align:right; }
+.global-counter .gc-label{
+  font-family:var(--font-mono); font-size:9px; color:var(--text-2);
+  letter-spacing:2px; text-transform:uppercase;
+}
+#attackCounter{
+  font-family:var(--font-mono); font-size:18px; font-weight:700;
+  color:var(--danger); text-shadow:0 0 12px rgba(255,59,59,.4);
+}
+
+/* Scanning accent line below header */
+.scanbar{
+  grid-area:scan; position:relative; overflow:hidden;
+  background:linear-gradient(90deg, transparent, rgba(6,182,212,.12), transparent);
+}
+.scanbar::after{
+  content:''; position:absolute; top:0; left:0; height:100%; width:18%;
+  background:linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow:0 0 12px 1px var(--accent);
+  animation:scanSweep 3.2s cubic-bezier(.4,0,.6,1) infinite;
+  will-change:transform;
+}
+@keyframes scanSweep{ 0%{transform:translateX(-120%);} 100%{transform:translateX(680%);} }
+
+/* ============================================================
+   PANELS (shared)
+   ============================================================ */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  box-shadow:inset 0 0 24px rgba(6,182,212,.04);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  will-change:transform,opacity;
+}
+/* Hover transition enabled only after the GSAP intro finishes,
+   so the CSS transition never fights the entrance tween */
+body.ready .panel{
+  transition:transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.panel:hover{
+  transform:scale(1.01);
+  border-color:rgba(6,182,212,.4);
+  box-shadow:inset 0 0 24px rgba(6,182,212,.08), 0 0 18px rgba(6,182,212,.08);
+}
+.panel-header{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 14px;
+  font-family:var(--font-head); font-size:12px; font-weight:600;
+  letter-spacing:2.5px; color:var(--accent);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.section-title{
+  font-family:var(--font-head); font-size:11px; font-weight:600;
+  letter-spacing:2px; color:var(--text-2); text-transform:uppercase;
+  margin-bottom:10px;
+}
+
+/* ============================================================
+   LEFT PANEL — LIVE FEED
+   ============================================================ */
+#feedPanel{ grid-area:feed; margin:12px 0 12px 12px; position:relative; }
+.rec-dot{
+  width:8px; height:8px; border-radius:50%; background:var(--danger);
+  animation:blink 1s steps(2,start) infinite;
+}
+@keyframes blink{ 0%{opacity:1;} 50%{opacity:.15;} 100%{opacity:1;} }
+#feedWrap{ position:relative; flex:1; overflow:hidden; }
+#matrixCanvas{ position:absolute; inset:0; width:100%; height:100%; opacity:.06; pointer-events:none; }
+#feedList{
+  position:relative; height:100%; overflow-y:auto; padding:8px 10px;
+  font-family:var(--font-mono); font-size:10.5px; line-height:1.5;
+}
+.feed-row{
+  padding:4px 6px; margin-bottom:3px;
+  border-left:2px solid; border-radius:0 4px 4px 0;
+  background:rgba(255,255,255,.02);
+  cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  will-change:transform,opacity;
+  transition:background .15s ease;
+}
+.feed-row:hover{ background:rgba(6,182,212,.08); }
+.feed-row .fr-time{ color:var(--text-2); }
+.feed-row .fr-arrow{ color:var(--text-2); }
+
+/* ============================================================
+   CENTER — 3D GLOBE
+   ============================================================ */
+#globePanel{
+  grid-area:globe; position:relative; overflow:hidden;
+  background:radial-gradient(ellipse at 45% 45%, #0a1020 0%, var(--bg) 70%);
+}
+#globeCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+#globeCanvas.dragging{ cursor:grabbing; }
+.globe-hint{
+  position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+  font-family:var(--font-mono); font-size:9px; letter-spacing:2px;
+  color:var(--text-2); pointer-events:none; text-transform:uppercase;
+  opacity:.7;
+}
+
+/* Country tooltip */
+#tooltip{
+  position:fixed; z-index:60; pointer-events:none;
+  background:var(--panel); border:1px solid rgba(6,182,212,.4);
+  border-radius:6px; padding:10px 12px;
+  font-size:11px; min-width:180px;
+  box-shadow:0 6px 24px rgba(0,0,0,.6), 0 0 12px rgba(6,182,212,.15);
+  opacity:0; transform:translateY(4px);
+  transition:opacity .15s ease, transform .15s ease;
+}
+#tooltip.show{ opacity:1; transform:translateY(0); }
+#tooltip .tt-name{ font-family:var(--font-head); font-weight:600; font-size:13px; margin-bottom:5px; }
+#tooltip .tt-row{
+  display:flex; justify-content:space-between; gap:14px;
+  color:var(--text-2); font-family:var(--font-mono); font-size:10px; margin-top:2px;
+}
+#tooltip .tt-row b{ color:var(--text); font-weight:500; }
+
+/* ============================================================
+   RIGHT PANEL — STATS
+   ============================================================ */
+#statsPanel{ grid-area:stats; margin:12px 12px 12px 0; }
+#statsScroll{ flex:1; overflow-y:auto; padding:14px; }
+.stat-section{ margin-bottom:20px; }
+.donut-wrap{ display:flex; justify-content:center; position:relative; }
+#donutCanvas{ width:150px; height:150px; }
+.donut-center{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  text-align:center; pointer-events:none;
+}
+.donut-center .dc-num{ font-family:var(--font-mono); font-size:17px; font-weight:700; }
+.donut-center .dc-label{ font-size:8px; letter-spacing:1.5px; color:var(--text-2); text-transform:uppercase; }
+.legend{ margin-top:12px; }
+.legend-row{ display:flex; align-items:center; gap:8px; font-size:11px; padding:2.5px 0; }
+.legend-dot{ width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+.legend-row .lg-name{ flex:1; }
+.legend-row .lg-count{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-2); }
+
+.bar-row{ display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+.bar-row .br-label{
+  width:86px; flex-shrink:0; font-size:11px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.bar-row .br-track{
+  flex:1; height:8px; background:rgba(255,255,255,.04); border-radius:4px;
+  overflow:hidden; position:relative;
+}
+.bar-row .br-fill{
+  position:absolute; inset:0; border-radius:4px;
+  transform-origin:left center; transform:scaleX(0);
+  transition:transform .9s cubic-bezier(.22,1,.36,1);
+  will-change:transform;
+}
+.bar-target .br-fill{ background:linear-gradient(90deg,#0e7490,var(--accent)); }
+.bar-source .br-fill{ background:linear-gradient(90deg,#7f1d1d,var(--danger)); }
+.bar-row .br-count{
+  width:44px; text-align:right; flex-shrink:0;
+  font-family:var(--font-mono); font-size:10px; color:var(--text-2);
+}
+
+/* ============================================================
+   TICKER
+   ============================================================ */
+#ticker{
+  grid-area:ticker; position:relative; overflow:hidden;
+  background:var(--surface);
+  border-top:1px solid rgba(255,59,59,.25);
+  box-shadow:inset 0 6px 18px rgba(255,59,59,.06);
+  display:flex; align-items:center;
+  will-change:transform,opacity;
+}
+#ticker::before{
+  content:'THREAT INTEL';
+  position:absolute; left:0; top:0; bottom:0; z-index:2;
+  display:flex; align-items:center; padding:0 14px;
+  background:var(--surface);
+  border-right:1px solid rgba(255,59,59,.3);
+  font-family:var(--font-head); font-size:10px; font-weight:700;
+  letter-spacing:2px; color:var(--danger);
+}
+.ticker-track{
+  display:flex; white-space:nowrap;
+  animation:tickerScroll 75s linear infinite;
+  will-change:transform;
+}
+#ticker:hover .ticker-track{ animation-play-state:paused; }
+@keyframes tickerScroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+.ticker-item{
+  display:inline-flex; align-items:center;
+  font-family:var(--font-mono); font-size:11px; padding:0 4px;
+}
+.ticker-item::after{
+  content:''; width:6px; height:6px; border-radius:50%;
+  background:var(--danger); margin:0 18px;
+  box-shadow:0 0 8px 2px rgba(255,59,59,.5);
+}
+
+/* ============================================================
+   MODAL — ATTACK / COUNTRY DETAIL
+   ============================================================ */
+#backdrop{
+  position:fixed; inset:0; z-index:80;
+  background:rgba(8,11,20,.55);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  opacity:0; pointer-events:none; transition:opacity .3s ease;
+}
+#backdrop.open{ opacity:1; pointer-events:auto; }
+#modal{
+  position:fixed; top:0; right:0; bottom:0; z-index:90;
+  width:min(400px,92vw);
+  background:var(--panel);
+  border-left:1px solid rgba(6,182,212,.35);
+  box-shadow:-20px 0 60px rgba(0,0,0,.7), inset 0 0 30px rgba(6,182,212,.04);
+  transform:translateX(105%);
+  overflow-y:auto; padding:22px;
+  will-change:transform;
+}
+.modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+.modal-type{ font-family:var(--font-head); font-size:20px; font-weight:700; }
+#modalClose{
+  background:none; border:1px solid var(--border); border-radius:4px;
+  color:var(--text-2); font-family:var(--font-mono); font-size:14px;
+  width:30px; height:30px; cursor:pointer; transition:all .2s ease;
+}
+#modalClose:hover{ color:var(--danger); border-color:var(--danger); }
+.severity-badge{
+  display:inline-block; margin:6px 0 16px;
+  font-family:var(--font-mono); font-size:10px; font-weight:700;
+  letter-spacing:2px; padding:4px 10px; border-radius:4px; border:1px solid;
+}
+.modal-block{
+  border:1px solid var(--border); border-radius:6px;
+  padding:12px; margin-bottom:12px; background:rgba(255,255,255,.015);
+}
+.modal-block h4{
+  font-family:var(--font-head); font-size:10px; font-weight:600;
+  letter-spacing:2px; color:var(--text-2); text-transform:uppercase; margin-bottom:8px;
+}
+.kv{ display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; }
+.kv .k{ color:var(--text-2); }
+.kv .v{ font-family:var(--font-mono); text-align:right; }
+.modal-desc{ font-size:12px; line-height:1.65; }
+.modal-mit{ list-style:none; }
+.modal-mit li{ font-size:11.5px; line-height:1.55; padding:3px 0 3px 16px; position:relative; }
+.modal-mit li::before{ content:'▸'; position:absolute; left:0; color:var(--accent); }
+#sparkCanvas{ width:100%; height:48px; display:block; }
+.modal-ts{ font-family:var(--font-mono); font-size:10px; color:var(--text-2); text-align:right; margin-top:4px; }
+
+/* ============================================================
+   RESPONSIVE — mobile stacking
+   ============================================================ */
+@media (max-width:768px){
+  body{ overflow-y:auto; }
+  #app{
+    height:auto; min-height:100vh;
+    grid-template-columns:1fr;
+    grid-template-rows:56px 3px minmax(300px,52vh) 340px auto 40px;
+    grid-template-areas:"header" "scan" "globe" "feed" "stats" "ticker";
+  }
+  #feedPanel{ margin:10px; }
+  #statsPanel{ margin:0 10px 10px; }
+  #statsScroll{ display:flex; gap:16px; overflow-x:auto; overflow-y:hidden; }
+  .stat-section{ min-width:230px; flex-shrink:0; margin-bottom:0; }
+  #ticker{ position:sticky; bottom:0; }
+  .header-right{ gap:10px; }
+  .global-counter .gc-label{ display:none; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ==================== HEADER ==================== -->
+  <header id="header">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" stroke="#06b6d4" stroke-width="1.5" opacity=".35"/>
+        <circle cx="16" cy="16" r="8"  stroke="#06b6d4" stroke-width="1.5" opacity=".6"/>
+        <circle cx="16" cy="16" r="3"  fill="#06b6d4"/>
+        <circle class="logo-ring" cx="16" cy="16" r="13" stroke="#06b6d4" stroke-width="1.5"/>
+      </svg>
+      <h1>Threat<span>Pulse</span></h1>
+    </div>
+    <div class="header-right">
+      <div class="global-counter">
+        <div class="gc-label">Attacks Today · Global</div>
+        <div id="attackCounter">0</div>
+      </div>
+      <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+      <div id="clock">00:00:00</div>
+    </div>
+  </header>
+  <div class="scanbar"></div>
+
+  <!-- ==================== LEFT — LIVE FEED ==================== -->
+  <aside class="panel" id="feedPanel">
+    <div class="panel-header"><span class="rec-dot"></span>LIVE FEED</div>
+    <div id="feedWrap">
+      <canvas id="matrixCanvas"></canvas>
+      <div id="feedList"></div>
+    </div>
+  </aside>
+
+  <!-- ==================== CENTER — 3D GLOBE ==================== -->
+  <section id="globePanel">
+    <canvas id="globeCanvas"></canvas>
+    <div class="globe-hint">drag to rotate · scroll to zoom · click arcs &amp; countries</div>
+  </section>
+
+  <!-- ==================== RIGHT — STATS ==================== -->
+  <aside class="panel" id="statsPanel">
+    <div class="panel-header">INTELLIGENCE</div>
+    <div id="statsScroll">
+      <div class="stat-section">
+        <div class="section-title">Attack Type Breakdown</div>
+        <div class="donut-wrap">
+          <canvas id="donutCanvas" width="300" height="300"></canvas>
+          <div class="donut-center">
+            <div class="dc-num" id="donutTotal">0</div>
+            <div class="dc-label">Tracked</div>
+          </div>
+        </div>
+        <div class="legend" id="donutLegend"></div>
+      </div>
+      <div class="stat-section">
+        <div class="section-title">Top Targeted Countries</div>
+        <div class="bar-target" id="targetBars"></div>
+      </div>
+      <div class="stat-section">
+        <div class="section-title">Top Attacker Origins</div>
+        <div class="bar-source" id="sourceBars"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==================== TICKER ==================== -->
+  <div id="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+</div>
+
+<!-- Country / arc tooltip -->
+<div id="tooltip"></div>
+
+<!-- ==================== MODAL ==================== -->
+<div id="backdrop"></div>
+<aside id="modal" aria-hidden="true">
+  <div class="modal-head">
+    <div class="modal-type" id="mTitle">—</div>
+    <button id="modalClose" aria-label="Close">✕</button>
+  </div>
+  <span class="severity-badge" id="mBadge">—</span>
+  <div id="modalBody"></div>
+  <div class="modal-block">
+    <h4>Attack Frequency — Last 60s (all types)</h4>
+    <canvas id="sparkCanvas" width="700" height="96"></canvas>
+  </div>
+  <div class="modal-ts" id="mTime"></div>
+</aside>
+
+<script>
+'use strict';
+/* ############################################################
+   SECTION 1 — SIMULATION DATA
+   Everything below is simulated. Edit these arrays to extend
+   the dashboard: a new country or attack type is data-only.
+   ############################################################ */
+
+/* Attack types: name, arc/UI color, spawn weight (%) */
+const ATTACK_TYPES = [
+  { name:'DDoS',          color:'#ff3b3b', weight:30 },
+  { name:'Phishing',      color:'#a855f7', weight:25 },
+  { name:'Malware',       color:'#ff8c00', weight:20 },
+  { name:'Brute Force',   color:'#06b6d4', weight:15 },
+  { name:'Ransomware',    color:'#eab308', weight:6  },
+  { name:'SQL Injection', color:'#22c55e', weight:4  },
+];
+
+/* Vector intel per attack type: description + blue-team mitigations */
+const VECTOR_INFO = {
+  'DDoS':{
+    desc:'Volumetric distributed denial-of-service flood sourced from a botnet of compromised IoT devices and rented booter infrastructure. Traffic combines UDP amplification (DNS/NTP reflection) with an HTTP/2 request flood aimed at exhausting connection tables and origin bandwidth.',
+    mit:['Route traffic through a scrubbing/CDN provider with anycast absorption before it reaches origin.',
+         'Enable rate limiting and SYN cookies at the edge; drop known reflection ports upstream.',
+         'Pre-arrange BGP Flowspec or RTBH blackholing with your upstream carrier for burst events.']
+  },
+  'Malware':{
+    desc:'Second-stage loader delivered via malvertising redirect chain. The dropper retrieves an encrypted payload from a rotating C2 domain, injects into a signed system process, and establishes persistence through a scheduled task masquerading as a software updater.',
+    mit:['Deploy EDR with behavioral detection and block unsigned binaries executing from user-writable paths.',
+         'Enforce application allowlisting (WDAC/AppLocker) on high-value endpoints.',
+         'Sinkhole or DNS-filter newly registered domains; patch browsers and plugins aggressively.']
+  },
+  'Phishing':{
+    desc:'Credential-harvesting campaign using a reverse-proxy (AiTM) kit that clones the target’s SSO login page in real time, capturing both passwords and session cookies to bypass conventional one-time-code MFA.',
+    mit:['Roll out phishing-resistant MFA (FIDO2/WebAuthn hardware keys) for all privileged accounts.',
+         'Enforce DMARC (p=reject) with aligned SPF/DKIM and flag external-origin mail in clients.',
+         'Enable conditional access checks on impossible travel and unfamiliar session tokens.']
+  },
+  'Brute Force':{
+    desc:'Distributed password-spraying attack against internet-exposed RDP and SSH services. The actor rotates through residential proxy exit nodes, testing a short list of common credentials across thousands of accounts to stay under lockout thresholds.',
+    mit:['Remove RDP/SSH from direct internet exposure; require VPN or a hardened bastion with MFA.',
+         'Enforce account lockout plus fail2ban-style adaptive IP banning and geo-fencing.',
+         'Monitor for low-and-slow auth failures spread across many accounts, not just per-account spikes.']
+  },
+  'Ransomware':{
+    desc:'Post-exploitation ransomware deployment following initial access via a stolen VPN credential. The operator performed lateral movement over SMB, disabled volume shadow copies, exfiltrated data for double extortion, then pushed the encryptor via GPO.',
+    mit:['Maintain offline, immutable backups (3-2-1) and test restores on a fixed schedule.',
+         'Segment networks and restrict SMB/RDP east-west traffic between workstation VLANs.',
+         'Alert on shadow-copy deletion, mass file renames, and GPO changes; deploy canary files.']
+  },
+  'SQL Injection':{
+    desc:'Automated SQL injection probing against a public web application, using time-based blind techniques on an unsanitized search parameter to enumerate schema and extract credential tables through the database service account.',
+    mit:['Use parameterized queries / prepared statements everywhere; ban string-built SQL in code review.',
+         'Run the application’s DB account with least privilege — no schema read beyond its needs.',
+         'Front the app with a tuned WAF and alert on time-based anomaly patterns in query latency.']
+  },
+};
+
+/* Countries: ISO code, name, flag, lat/lng (globe anchor),
+   atk = attacker-origin weight, tgt = target weight,
+   cities + plausible ISPs for geolocation flavor */
+const COUNTRIES = [
+  { code:'US', name:'United States', flag:'🇺🇸', lat:39.0,  lng:-98.0,  atk:8,  tgt:20, cities:['New York','Washington','Los Angeles','Chicago','Ashburn','Dallas'], isps:['Comcast Business','Cogent Communications','DigitalOcean LLC'] },
+  { code:'RU', name:'Russia',        flag:'🇷🇺', lat:55.75, lng:37.62,  atk:20, tgt:4,  cities:['Moscow','St. Petersburg','Novosibirsk','Yekaterinburg'], isps:['Rostelecom','Selectel Ltd','TransTelekom'] },
+  { code:'CN', name:'China',         flag:'🇨🇳', lat:39.9,  lng:116.4,  atk:18, tgt:5,  cities:['Beijing','Shanghai','Shenzhen','Guangzhou'], isps:['China Telecom','China Unicom','Alibaba Cloud'] },
+  { code:'DE', name:'Germany',       flag:'🇩🇪', lat:52.52, lng:13.4,   atk:4,  tgt:12, cities:['Berlin','Frankfurt','Munich','Hamburg'], isps:['Deutsche Telekom','Hetzner Online','1&1 Versatel'] },
+  { code:'GB', name:'United Kingdom',flag:'🇬🇧', lat:51.5,  lng:-0.12,  atk:3,  tgt:11, cities:['London','Manchester','Birmingham'], isps:['BT Group','Virgin Media','OVH UK'] },
+  { code:'BR', name:'Brazil',        flag:'🇧🇷', lat:-15.79,lng:-47.88, atk:6,  tgt:4,  cities:['São Paulo','Rio de Janeiro','Brasília'], isps:['Vivo S.A.','Claro Brasil','Algar Telecom'] },
+  { code:'IN', name:'India',         flag:'🇮🇳', lat:28.61, lng:77.2,   atk:6,  tgt:5,  cities:['Mumbai','New Delhi','Bengaluru','Hyderabad'], isps:['Bharti Airtel','Reliance Jio','Tata Communications'] },
+  { code:'IR', name:'Iran',          flag:'🇮🇷', lat:35.69, lng:51.39,  atk:12, tgt:3,  cities:['Tehran','Isfahan','Mashhad'], isps:['TCI','Pars Online','Shatel Network'] },
+  { code:'KP', name:'North Korea',   flag:'🇰🇵', lat:39.03, lng:125.75, atk:10, tgt:1,  cities:['Pyongyang','Hamhung','Chongjin'], isps:['Star JV Co.','KPTC'] },
+  { code:'UA', name:'Ukraine',       flag:'🇺🇦', lat:50.45, lng:30.52,  atk:3,  tgt:10, cities:['Kyiv','Kharkiv','Odesa','Lviv'], isps:['Kyivstar','Ukrtelecom','Datagroup'] },
+  { code:'FR', name:'France',        flag:'🇫🇷', lat:48.85, lng:2.35,   atk:3,  tgt:7,  cities:['Paris','Lyon','Marseille'], isps:['Orange S.A.','OVHcloud','Free SAS'] },
+  { code:'NL', name:'Netherlands',   flag:'🇳🇱', lat:52.37, lng:4.9,    atk:5,  tgt:5,  cities:['Amsterdam','Rotterdam','The Hague'], isps:['KPN B.V.','LeaseWeb','Serverius Holding'] },
+  { code:'CA', name:'Canada',        flag:'🇨🇦', lat:45.42, lng:-75.7,  atk:2,  tgt:4,  cities:['Toronto','Montreal','Vancouver'], isps:['Bell Canada','Rogers Communications','TELUS'] },
+  { code:'AU', name:'Australia',     flag:'🇦🇺', lat:-33.87,lng:151.21, atk:2,  tgt:4,  cities:['Sydney','Melbourne','Brisbane'], isps:['Telstra','Optus','TPG Telecom'] },
+  { code:'JP', name:'Japan',         flag:'🇯🇵', lat:35.68, lng:139.69, atk:2,  tgt:6,  cities:['Tokyo','Osaka','Nagoya'], isps:['NTT Communications','SoftBank Corp','KDDI'] },
+  { code:'KR', name:'South Korea',   flag:'🇰🇷', lat:37.57, lng:126.98, atk:2,  tgt:5,  cities:['Seoul','Busan','Incheon'], isps:['KT Corporation','SK Broadband','LG Uplus'] },
+  { code:'IL', name:'Israel',        flag:'🇮🇱', lat:32.08, lng:34.78,  atk:2,  tgt:7,  cities:['Tel Aviv','Jerusalem','Haifa'], isps:['Bezeq International','Partner Communications','Cellcom'] },
+  { code:'TR', name:'Turkey',        flag:'🇹🇷', lat:41.0,  lng:28.97,  atk:4,  tgt:3,  cities:['Istanbul','Ankara','Izmir'], isps:['Turk Telekom','Turkcell','Vodafone TR'] },
+  { code:'RO', name:'Romania',       flag:'🇷🇴', lat:44.43, lng:26.1,   atk:4,  tgt:2,  cities:['Bucharest','Cluj-Napoca','Timișoara'], isps:['RCS & RDS','Orange România','M247 Europe'] },
+  { code:'NG', name:'Nigeria',       flag:'🇳🇬', lat:9.06,  lng:7.49,   atk:4,  tgt:1,  cities:['Lagos','Abuja','Port Harcourt'], isps:['MTN Nigeria','Globacom','Airtel Nigeria'] },
+  { code:'IT', name:'Italy',         flag:'🇮🇹', lat:41.9,  lng:12.5,   atk:2,  tgt:4,  cities:['Rome','Milan','Turin'], isps:['TIM S.p.A.','Aruba S.p.A.','Fastweb'] },
+  { code:'ES', name:'Spain',         flag:'🇪🇸', lat:40.42, lng:-3.7,   atk:2,  tgt:3,  cities:['Madrid','Barcelona','Valencia'], isps:['Telefónica','Vodafone España','MásMóvil'] },
+  { code:'PL', name:'Poland',        flag:'🇵🇱', lat:52.23, lng:21.01,  atk:2,  tgt:3,  cities:['Warsaw','Kraków','Wrocław'], isps:['Orange Polska','T-Mobile Polska','OVH Sp. z o.o.'] },
+  { code:'SE', name:'Sweden',        flag:'🇸🇪', lat:59.33, lng:18.07,  atk:1,  tgt:2,  cities:['Stockholm','Gothenburg','Malmö'], isps:['Telia Company','Bahnhof AB','GleSYS AB'] },
+  { code:'CH', name:'Switzerland',   flag:'🇨🇭', lat:46.95, lng:7.45,   atk:1,  tgt:3,  cities:['Zurich','Geneva','Bern'], isps:['Swisscom','Init7','Sunrise GmbH'] },
+  { code:'SG', name:'Singapore',     flag:'🇸🇬', lat:1.35,  lng:103.82, atk:2,  tgt:3,  cities:['Singapore','Jurong East','Changi'], isps:['Singtel','StarHub','M1 Limited'] },
+  { code:'VN', name:'Vietnam',       flag:'🇻🇳', lat:21.03, lng:105.85, atk:3,  tgt:2,  cities:['Hanoi','Ho Chi Minh City','Da Nang'], isps:['Viettel Group','VNPT','FPT Telecom'] },
+  { code:'ID', name:'Indonesia',     flag:'🇮🇩', lat:-6.21, lng:106.85, atk:3,  tgt:2,  cities:['Jakarta','Surabaya','Bandung'], isps:['Telkom Indonesia','Indosat Ooredoo','Biznet Networks'] },
+  { code:'PK', name:'Pakistan',      flag:'🇵🇰', lat:33.68, lng:73.05,  atk:3,  tgt:2,  cities:['Karachi','Lahore','Islamabad'], isps:['PTCL','Nayatel','Transworld'] },
+  { code:'EG', name:'Egypt',         flag:'🇪🇬', lat:30.04, lng:31.24,  atk:2,  tgt:2,  cities:['Cairo','Alexandria','Giza'], isps:['Telecom Egypt','Vodafone Egypt','Orange Egypt'] },
+  { code:'ZA', name:'South Africa',  flag:'🇿🇦', lat:-25.75,lng:28.19,  atk:2,  tgt:2,  cities:['Johannesburg','Cape Town','Durban'], isps:['Telkom SA','Vodacom','MTN South Africa'] },
+  { code:'MX', name:'Mexico',        flag:'🇲🇽', lat:19.43, lng:-99.13, atk:2,  tgt:2,  cities:['Mexico City','Guadalajara','Monterrey'], isps:['Telmex','Axtel','Totalplay'] },
+  { code:'AR', name:'Argentina',     flag:'🇦🇷', lat:-34.6, lng:-58.38, atk:1,  tgt:1,  cities:['Buenos Aires','Córdoba','Rosario'], isps:['Telecom Argentina','Claro AR','Fibertel'] },
+  { code:'SA', name:'Saudi Arabia',  flag:'🇸🇦', lat:24.71, lng:46.68,  atk:1,  tgt:3,  cities:['Riyadh','Jeddah','Dammam'], isps:['STC','Mobily','Zain SA'] },
+  { code:'AE', name:'UAE',           flag:'🇦🇪', lat:24.45, lng:54.38,  atk:1,  tgt:3,  cities:['Dubai','Abu Dhabi','Sharjah'], isps:['Etisalat','du Telecom'] },
+  { code:'TH', name:'Thailand',      flag:'🇹🇭', lat:13.75, lng:100.5,  atk:2,  tgt:2,  cities:['Bangkok','Chiang Mai','Phuket'], isps:['AIS','True Internet','NT Telecom'] },
+  { code:'MY', name:'Malaysia',      flag:'🇲🇾', lat:3.14,  lng:101.69, atk:1,  tgt:2,  cities:['Kuala Lumpur','George Town','Johor Bahru'], isps:['Telekom Malaysia','Maxis','Time dotCom'] },
+  { code:'PH', name:'Philippines',   flag:'🇵🇭', lat:14.6,  lng:120.98, atk:2,  tgt:1,  cities:['Manila','Cebu City','Davao'], isps:['PLDT','Globe Telecom','Converge ICT'] },
+  { code:'BD', name:'Bangladesh',    flag:'🇧🇩', lat:23.81, lng:90.41,  atk:2,  tgt:1,  cities:['Dhaka','Chittagong','Khulna'], isps:['GrameenPhone','BTCL','Link3 Technologies'] },
+  { code:'CZ', name:'Czechia',       flag:'🇨🇿', lat:50.08, lng:14.44,  atk:1,  tgt:2,  cities:['Prague','Brno','Ostrava'], isps:['O2 Czech Republic','CETIN','Vodafone CZ'] },
+  { code:'BG', name:'Bulgaria',      flag:'🇧🇬', lat:42.7,  lng:23.32,  atk:2,  tgt:1,  cities:['Sofia','Plovdiv','Varna'], isps:['Vivacom','A1 Bulgaria','Neterra'] },
+  { code:'BY', name:'Belarus',       flag:'🇧🇾', lat:53.9,  lng:27.57,  atk:3,  tgt:1,  cities:['Minsk','Gomel','Brest'], isps:['Beltelecom','A1 Belarus','MTS Belarus'] },
+];
+
+/* Simplified landmass polygons for the procedural globe texture.
+   Coordinates are in a 1000x500 equirectangular space:
+   x = (lng+180)/360*1000, y = (90-lat)/180*500.
+   Swap in higher-fidelity GeoJSON-derived rings here any time —
+   the texture builder only expects arrays of [x,y] points. */
+const LAND_POLYGONS = [
+  /* North America */
+  [[33,67],[39,83],[61,94],[78,86],[111,83],[136,106],[153,117],[156,139],[175,158],[186,175],[194,186],[208,197],[236,206],[261,214],[269,225],[283,228],[286,231],[272,217],[258,203],[261,192],[250,194],[242,186],[231,178],[247,172],[261,175],[275,181],[278,167],[289,153],[306,133],[319,128],[333,122],[317,111],[344,106],[347,103],[339,86],[311,86],[283,78],[264,97],[250,89],[242,72],[222,64],[194,50],[153,56],[111,58],[67,53]],
+  /* Greenland */
+  [[339,39],[361,25],[411,18],[444,56],[417,64],[381,83],[353,67]],
+  /* South America */
+  [[286,231],[306,222],[331,222],[344,231],[356,239],[378,250],[403,269],[392,286],[367,319],[353,344],[339,358],[319,364],[311,394],[303,403],[294,389],[297,361],[303,333],[306,300],[292,289],[275,264],[278,247],[283,239]],
+  /* Eurasia */
+  [[475,147],[475,131],[486,125],[494,122],[486,117],[506,108],[522,100],[525,92],[531,97],[539,100],[558,97],[567,86],[583,83],[578,81],[561,72],[564,67],[553,78],[550,86],[536,96],[514,89],[514,78],[533,69],[544,61],[569,53],[611,61],[639,58],[667,58],[708,50],[778,36],[806,47],[861,50],[917,56],[972,58],[997,69],[978,81],[950,94],[939,111],[933,103],[917,97],[897,100],[889,114],[875,128],[861,131],[858,147],[853,153],[850,142],[839,139],[839,150],[833,161],[836,172],[825,186],[806,194],[797,203],[803,217],[792,225],[781,211],[786,242],[775,231],[772,211],[761,206],[756,192],[753,189],[739,194],[722,214],[715,228],[703,206],[694,192],[683,181],[658,178],[650,172],[664,189],[653,203],[622,215],[619,203],[608,192],[597,172],[594,164],[600,150],[583,150],[575,147],[572,142],[567,144],[561,147],[558,142],[553,133],[544,136],[542,144],[539,133],[531,128],[514,131],[500,139],[494,147],[486,150]],
+  /* Africa */
+  [[483,153],[472,164],[453,192],[453,211],[467,225],[478,236],[489,236],[511,233],[525,239],[525,253],[536,283],[533,297],[542,325],[550,342],[556,346],[572,344],[592,328],[597,317],[611,294],[611,281],[608,264],[614,256],[636,231],[642,219],[622,219],[614,208],[603,200],[603,189],[594,175],[589,167],[583,164],[569,161],[556,158],[542,158],[528,156],[528,147],[514,150]],
+  /* Madagascar */
+  [[622,283],[639,294],[631,319],[622,306]],
+  /* Australia */
+  [[817,311],[814,322],[819,344],[844,342],[858,339],[867,339],[881,347],[889,356],[908,356],[917,353],[925,328],[925,319],[906,303],[894,281],[889,297],[878,292],[875,283],[864,283],[850,289],[839,297]],
+  /* Sumatra / Java / Borneo / Sulawesi / New Guinea */
+  [[764,236],[772,233],[797,264],[789,269]],
+  [[794,272],[833,275],[833,281],[794,278]],
+  [[800,244],[817,239],[825,253],[814,264],[800,258]],
+  [[828,250],[836,253],[833,264],[825,258]],
+  [[864,253],[897,258],[911,272],[886,269],[867,264]],
+  /* Philippines (Luzon, Mindanao) */
+  [[833,200],[839,203],[836,214],[831,208]],
+  [[844,222],[850,225],[847,231],[842,228]],
+  /* Japan (Hokkaido, Honshu, Kyushu) */
+  [[894,119],[903,122],[897,131],[889,128]],
+  [[875,153],[892,133],[897,136],[881,158]],
+  [[867,158],[872,161],[869,167],[864,164]],
+  /* British Isles + Iceland */
+  [[492,88],[504,103],[503,108],[486,111],[489,103],[483,92]],
+  [[472,100],[483,100],[483,106],[472,106]],
+  [[431,64],[447,64],[450,69],[436,72]],
+  /* New Zealand */
+  [[978,353],[983,347],[986,353],[981,358]],
+  [[969,364],[975,361],[972,372],[966,369]],
+  /* Sri Lanka, Cuba, Hispaniola */
+  [[722,225],[728,228],[725,233],[720,231]],
+  [[264,186],[283,192],[281,194],[262,189]],
+  [[289,194],[297,194],[297,197],[289,197]],
+];
+/* Inland seas drawn back in ocean color: [cx, cy, rx, ry] */
+const SEA_CUTOUTS = [ [600,131,20,7], [647,136,7,17] ]; /* Black Sea, Caspian */
+
+/* IP prefixes: attacker ranges resemble known bulletproof/Tor/VPS
+   infrastructure; target ranges resemble CDN / cloud space */
+const ATTACKER_IP_PREFIXES = ['185.220','194.165','45.142','91.240','5.188','89.248','141.98','193.106','92.63','176.111','62.204','103.75'];
+const TARGET_IP_PREFIXES   = ['104.18','151.101','172.67','20.42','52.94','13.107','34.120','142.250','199.60','198.41'];
+
+/* 20 simulated threat-intel ticker headlines */
+const HEADLINES = [
+  'APT29 spear-phishing campaign targeting EU financial sector detected',
+  'New zero-day CVE-2026-31337 disclosed affecting Apache HTTP Server mod_proxy',
+  'Botnet C2 infrastructure sinkholed — 50,000 nodes neutralized in joint operation',
+  "Ransomware group 'BlackCat' claims new victim in US healthcare sector",
+  'Critical RCE in widely deployed VPN appliances under active exploitation',
+  'Lazarus Group linked to $120M cryptocurrency exchange heist',
+  'Phishing kit impersonating Microsoft 365 login pages spikes 340% this week',
+  'CISA adds three vulnerabilities to Known Exploited Vulnerabilities catalog',
+  'LockBit affiliate arrested in Ontario; infrastructure seized by Europol',
+  'Supply-chain compromise suspected in popular npm package — 2M weekly downloads',
+  'DDoS-for-hire service dismantled; six operators charged across three countries',
+  "Iranian APT 'Charming Kitten' targeting journalists with fake conference invites",
+  'New Mirai variant exploiting unpatched IoT DVRs across Southeast Asia',
+  'Stolen-credential marketplace listing 4.2M fresh records from infostealer logs',
+  'Emotet loader activity resurges after three months of dormancy',
+  'Zero-click mobile exploit chain reportedly priced at $9M on gray market',
+  'Water utility SCADA systems probed by unknown actor; ICS-CERT advisory issued',
+  'QakBot distribution shifting to SVG smuggling in email attachments',
+  'Cl0p exploiting managed file-transfer zero-day; 40+ organizations impacted',
+  "GRU-linked 'Sandworm' deploying wiper malware against Ukrainian energy grid",
+];
+
+/* Severity distribution per attack type: [Critical, High, Medium, Low] */
+const SEVERITY_WEIGHTS = {
+  'DDoS':[10,40,40,10], 'Malware':[20,40,30,10], 'Phishing':[10,30,40,20],
+  'Brute Force':[5,25,45,25], 'Ransomware':[55,35,10,0], 'SQL Injection':[25,40,25,10],
+};
+const SEVERITY_COLORS = { Critical:'#ff3b3b', High:'#ff8c00', Medium:'#eab308', Low:'#22c55e' };
+
+/* ############################################################
+   SECTION 2 — UTILITIES
+   ############################################################ */
+const $ = id => document.getElementById(id);
+const rand = (a,b) => a + Math.random()*(b-a);
+const randInt = (a,b) => Math.floor(rand(a,b+1));
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+function weightedPick(arr, key){
+  const total = arr.reduce((s,o)=>s+o[key],0);
+  let r = Math.random()*total;
+  for(const o of arr){ r -= o[key]; if(r <= 0) return o; }
+  return arr[arr.length-1];
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtTime(d){ return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function makeIp(prefixes){ return pick(prefixes)+'.'+randInt(1,254)+'.'+randInt(2,254); }
+function pickSeverity(type){
+  const w = SEVERITY_WEIGHTS[type], labels = ['Critical','High','Medium','Low'];
+  let r = Math.random()*w.reduce((a,b)=>a+b,0);
+  for(let i=0;i<4;i++){ r -= w[i]; if(r<=0) return labels[i]; }
+  return 'Medium';
+}
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+const easeInOutCubic = t => t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+
+/* lat/lng -> position on a sphere of radius r (matches the
+   equirectangular texture orientation on THREE.SphereGeometry) */
+function latLngToVec3(lat,lng,r){
+  const phi = (90-lat)*Math.PI/180;
+  const theta = (lng+180)*Math.PI/180;
+  return new THREE.Vector3(
+    -r*Math.sin(phi)*Math.cos(theta),
+     r*Math.cos(phi),
+     r*Math.sin(phi)*Math.sin(theta)
+  );
+}
+
+/* ############################################################
+   SECTION 3 — RUNTIME STATE
+   ############################################################ */
+const state = {
+  attacks:new Map(),      // id -> attack record
+  typeCounts:Object.fromEntries(ATTACK_TYPES.map(t=>[t.name, randInt(40,160)])),
+  targetCounts:{}, sourceCounts:{},
+  countryDaily:{},        // simulated "attacks today" per country
+  countryTypes:{},        // per-country {attackType: count}
+  countryOrigins:{},      // per-country {srcCode: count}
+  timestamps:[],          // recent spawn times for the sparkline
+  globalCounter:{ val:1247382, display:1247382 },
+  nextId:1, running:false,
+};
+COUNTRIES.forEach(c=>{
+  state.countryDaily[c.code]  = randInt(800, 42000);
+  state.countryTypes[c.code]  = {};
+  state.countryOrigins[c.code]= {};
+  state.targetCounts[c.code]  = Math.round(c.tgt*randInt(3,9)); // seed bars
+  state.sourceCounts[c.code]  = Math.round(c.atk*randInt(3,9));
+});
+
+/* ############################################################
+   SECTION 4 — THREE.JS GLOBE SCENE
+   ############################################################ */
+const GLOBE_R = 1;
+const globePanel  = $('globePanel');
+const globeCanvas = $('globeCanvas');
+
+const renderer = new THREE.WebGLRenderer({ canvas:globeCanvas, antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+let camDist = 2.9;                       // wheel/pinch zoom target
+const CAM_MIN = 1.9, CAM_MAX = 4.2;
+camera.position.set(0,0,camDist);
+
+/* Everything that rotates together lives in this group.
+   Slight -x offset seats the globe left of the column center. */
+const globeGroup = new THREE.Group();
+globeGroup.position.x = -0.08;
+scene.add(globeGroup);
+
+/* ---- 4a. Procedural equirectangular texture (no image files) ---- */
+function buildGlobeTexture(){
+  const c = document.createElement('canvas');
+  c.width = 2048; c.height = 1024;
+  const ctx = c.getContext('2d');
+  const sx = c.width/1000, sy = c.height/500;
+
+  ctx.fillStyle = '#0a0f1e';                      // ocean
+  ctx.fillRect(0,0,c.width,c.height);
+
+  /* lat/lng grid — the tactical/radar look */
+  ctx.strokeStyle = '#0d1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.globalAlpha = 0.9;
+  for(let lng=-180; lng<180; lng+=30){
+    const x = (lng+180)/360*c.width;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,c.height); ctx.stroke();
+  }
+  for(let lat=-60; lat<=60; lat+=30){
+    const y = (90-lat)/180*c.height;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(c.width,y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  /* landmasses + borders */
+  ctx.fillStyle = '#101c33';
+  ctx.strokeStyle = '#1a2f4a';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  LAND_POLYGONS.forEach(poly=>{
+    ctx.beginPath();
+    poly.forEach(([x,y],i)=> i===0 ? ctx.moveTo(x*sx,y*sy) : ctx.lineTo(x*sx,y*sy));
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  });
+
+  /* inland seas back in ocean color */
+  ctx.fillStyle = '#0a0f1e';
+  SEA_CUTOUTS.forEach(([x,y,rx,ry])=>{
+    ctx.beginPath(); ctx.ellipse(x*sx,y*sy,rx*sx,ry*sy,0,0,Math.PI*2); ctx.fill();
+  });
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+
+const globeMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(GLOBE_R, 64, 48),
+  new THREE.MeshBasicMaterial({ map:buildGlobeTexture(), transparent:true, opacity:0 })
+);
+globeGroup.add(globeMesh);
+
+/* ---- 4b. Atmosphere halo (additive fresnel shader, BackSide) ---- */
+const atmosphere = new THREE.Mesh(
+  new THREE.SphereGeometry(GLOBE_R*1.14, 48, 32),
+  new THREE.ShaderMaterial({
+    vertexShader:`
+      varying vec3 vNormal;
+      void main(){
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader:`
+      varying vec3 vNormal;
+      uniform float uStrength;
+      void main(){
+        float intensity = pow(0.68 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.5);
+        gl_FragColor = vec4(0.02, 0.55, 0.75, 1.0) * intensity * uStrength;
+      }`,
+    uniforms:{ uStrength:{ value:0 } },
+    blending:THREE.AdditiveBlending,
+    side:THREE.BackSide,
+    transparent:true,
+    depthWrite:false,
+  })
+);
+scene.add(atmosphere);
+atmosphere.position.copy(globeGroup.position);
+
+/* ---- 4c. Shared sprite/ring resources (created once, reused) ---- */
+function makeGlowTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32,32,0,32,32,32);
+  grad.addColorStop(0,'rgba(255,255,255,1)');
+  grad.addColorStop(0.35,'rgba(255,255,255,.55)');
+  grad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const glowTexture  = makeGlowTexture();
+const rippleGeo    = new THREE.RingGeometry(0.9, 1.05, 40);   // scaled per ripple
+const highlightGeo = new THREE.RingGeometry(0.55, 0.72, 32);  // hover ring
+
+/* Hover highlight ring (repositioned onto the hovered country) */
+const highlightRing = new THREE.Mesh(
+  highlightGeo,
+  new THREE.MeshBasicMaterial({ color:0x06b6d4, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false })
+);
+highlightRing.scale.setScalar(0.055);
+globeGroup.add(highlightRing);
+
+/* Precompute country unit vectors for raycast lookups */
+COUNTRIES.forEach(c=>{ c.vec3 = latLngToVec3(c.lat, c.lng, 1); });
+
+/* ############################################################
+   SECTION 5 — ATTACK ARCS (BufferGeometry + custom ShaderMaterial)
+   Each arc: a QuadraticBezierCurve3 hugging the globe, a glow
+   shader trail behind an animated head sprite, then a ripple.
+   Geometries/materials are disposed when the arc completes.
+   ############################################################ */
+const MAX_ARCS = 8;
+const ARC_SEGMENTS = 64;
+const TRAIL_LEN = 0.35;    // fraction of the curve kept glowing behind the head
+const arcs = [];
+const ripples = [];
+
+const ARC_VERT = `
+  attribute float aT;
+  varying float vT;
+  void main(){
+    vT = aT;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }`;
+const ARC_FRAG = `
+  uniform vec3  uColor;
+  uniform float uHead;    /* progress of the pulse dot along the curve   */
+  uniform float uTrail;   /* trail length behind the head, in t units    */
+  uniform float uOpacity; /* master fade for arc completion              */
+  varying float vT;
+  void main(){
+    float d = uHead - vT;
+    if(d < 0.0 || d > uTrail) discard;
+    float a = (1.0 - d / uTrail) * uOpacity;
+    if(a <= 0.01) discard;
+    gl_FragColor = vec4(uColor, a);
+  }`;
+
+function spawnArc(attack){
+  if(arcs.length >= MAX_ARCS) removeArc(arcs[0]);   // recycle oldest
+
+  const start = latLngToVec3(attack.src.lat, attack.src.lng, GLOBE_R*1.002);
+  const end   = latLngToVec3(attack.dst.lat, attack.dst.lng, GLOBE_R*1.002);
+  const dist  = start.distanceTo(end);
+  /* control point above the surface — arc height ∝ distance */
+  const mid = start.clone().add(end).multiplyScalar(0.5)
+              .normalize().multiplyScalar(GLOBE_R + dist*0.45);
+  const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+
+  /* BufferGeometry: positions along the curve + per-vertex t */
+  const pts = curve.getPoints(ARC_SEGMENTS);
+  const positions = new Float32Array((ARC_SEGMENTS+1)*3);
+  const ts = new Float32Array(ARC_SEGMENTS+1);
+  pts.forEach((p,i)=>{ positions.set([p.x,p.y,p.z], i*3); ts[i] = i/ARC_SEGMENTS; });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  geo.setAttribute('aT', new THREE.BufferAttribute(ts,1));
+
+  const mat = new THREE.ShaderMaterial({
+    vertexShader:ARC_VERT, fragmentShader:ARC_FRAG,
+    uniforms:{
+      uColor:{ value:new THREE.Color(attack.color) },
+      uHead:{ value:0 }, uTrail:{ value:TRAIL_LEN }, uOpacity:{ value:1 },
+    },
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+  });
+  const line = new THREE.Line(geo, mat);
+  line.userData.attackId = attack.id;
+  globeGroup.add(line);
+
+  /* head pulse sprite */
+  const head = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:glowTexture, color:attack.color,
+    blending:THREE.AdditiveBlending, depthWrite:false, transparent:true,
+  }));
+  head.scale.setScalar(0.055);
+  globeGroup.add(head);
+
+  arcs.push({
+    attack, curve, line, mat, head,
+    born:performance.now(),
+    dur:rand(1400,2600),
+    phase:'flying', fadeStart:0,
+  });
+  pulseMarker(attack.src, 'src');
+  pulseMarker(attack.dst, 'dst');
+}
+
+function removeArc(a){
+  globeGroup.remove(a.line); globeGroup.remove(a.head);
+  a.line.geometry.dispose(); a.mat.dispose(); a.head.material.dispose();
+  const i = arcs.indexOf(a); if(i>-1) arcs.splice(i,1);
+}
+
+/* 3D impact shockwave: expanding ring tangent to the surface */
+function spawnRipple(attack){
+  const pos = latLngToVec3(attack.dst.lat, attack.dst.lng, GLOBE_R*1.004);
+  const mesh = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({
+    color:attack.color, transparent:true, opacity:1,
+    side:THREE.DoubleSide, depthWrite:false,
+  }));
+  mesh.position.copy(pos);
+  mesh.lookAt(pos.clone().multiplyScalar(2));     // face outward
+  mesh.scale.setScalar(0.012);
+  globeGroup.add(mesh);
+  ripples.push({ mesh, born:performance.now() });
+}
+
+/* ############################################################
+   SECTION 6 — ORIGIN/TARGET MARKERS (billboarded sprites)
+   Red = attacker origin, cyan = target. Pulse, then decay.
+   ############################################################ */
+const markers = new Map();   // key `${code}:${role}` -> {sprite, heat}
+function pulseMarker(country, role){
+  const key = country.code+':'+role;
+  let m = markers.get(key);
+  if(!m){
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:glowTexture, color:(role==='src' ? 0xff3b3b : 0x06b6d4),
+      blending:THREE.AdditiveBlending, depthWrite:false, transparent:true,
+    }));
+    sprite.position.copy(latLngToVec3(country.lat, country.lng, GLOBE_R*1.006));
+    globeGroup.add(sprite);
+    m = { sprite, heat:0, base:(role==='src'?0.045:0.04) };
+    markers.set(key,m);
+  }
+  m.heat = Math.min(1.6, m.heat+0.9);
+}
+function updateMarkers(now){
+  markers.forEach((m,key)=>{
+    m.heat *= 0.985;
+    if(m.heat < 0.04){
+      globeGroup.remove(m.sprite); m.sprite.material.dispose(); markers.delete(key);
+      return;
+    }
+    const pulse = 1 + 0.3*Math.sin(now*0.006 + m.sprite.position.x*10);
+    m.sprite.scale.setScalar(m.base * pulse * (0.6 + m.heat*0.5));
+    m.sprite.material.opacity = Math.min(1, m.heat);
+  });
+}
+
+/* ############################################################
+   SECTION 7 — GLOBE INTERACTION
+   drag-to-rotate (any axis) with inertia, wheel/pinch zoom,
+   idle auto-rotation, raycast hover + click.
+   ############################################################ */
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line = { threshold: 0.035 };
+const pointerNdc = new THREE.Vector2();
+
+const drag = {
+  active:false, lastX:0, lastY:0, moved:0,
+  velX:0, velY:0,               // inertia (rad/frame)
+  autoRotate:true, resumeTimer:null,
+};
+const activePointers = new Map(); // pinch tracking
+let pinchStartDist = 0, pinchStartCam = 0;
+
+function setNdcFromEvent(e){
+  const r = globeCanvas.getBoundingClientRect();
+  pointerNdc.x = ((e.clientX-r.left)/r.width)*2 - 1;
+  pointerNdc.y = -((e.clientY-r.top)/r.height)*2 + 1;
+}
+
+globeCanvas.addEventListener('pointerdown', e=>{
+  globeCanvas.setPointerCapture(e.pointerId);
+  activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(activePointers.size === 2){
+    const [a,b] = [...activePointers.values()];
+    pinchStartDist = Math.hypot(a.x-b.x, a.y-b.y);
+    pinchStartCam = camDist;
+    return;
+  }
+  drag.active = true; drag.moved = 0;
+  drag.lastX = e.clientX; drag.lastY = e.clientY;
+  drag.velX = drag.velY = 0;
+  drag.autoRotate = false;
+  clearTimeout(drag.resumeTimer);
+  globeCanvas.classList.add('dragging');
+});
+
+globeCanvas.addEventListener('pointermove', e=>{
+  if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+  /* pinch zoom (two active touches) */
+  if(activePointers.size === 2){
+    const [a,b] = [...activePointers.values()];
+    const d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(pinchStartDist > 0){
+      camDist = THREE.MathUtils.clamp(pinchStartCam * (pinchStartDist/d), CAM_MIN, CAM_MAX);
+    }
+    return;
+  }
+
+  if(drag.active){
+    const dx = e.clientX-drag.lastX, dy = e.clientY-drag.lastY;
+    drag.moved += Math.abs(dx)+Math.abs(dy);
+    drag.velY = dx*0.005;                     // yaw
+    drag.velX = dy*0.005;                     // pitch
+    globeGroup.rotation.y += drag.velY;
+    globeGroup.rotation.x = THREE.MathUtils.clamp(globeGroup.rotation.x + drag.velX, -1.1, 1.1);
+    drag.lastX = e.clientX; drag.lastY = e.clientY;
+  }else{
+    setNdcFromEvent(e);
+    handleHover(e);
+  }
+});
+
+function endPointer(e){
+  activePointers.delete(e.pointerId);
+  if(activePointers.size < 2) pinchStartDist = 0;
+  if(!drag.active) return;
+  drag.active = false;
+  globeCanvas.classList.remove('dragging');
+  /* click (not a drag): raycast arcs, then countries */
+  if(drag.moved < 6){
+    drag.velX = drag.velY = 0;
+    setNdcFromEvent(e);
+    handleClick();
+  }
+  /* resume auto-rotation 2s after release */
+  clearTimeout(drag.resumeTimer);
+  drag.resumeTimer = setTimeout(()=>{ drag.autoRotate = true; }, 2000);
+}
+globeCanvas.addEventListener('pointerup', endPointer);
+globeCanvas.addEventListener('pointercancel', endPointer);
+globeCanvas.addEventListener('pointerleave', ()=>hideTooltip());
+
+globeCanvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  camDist = THREE.MathUtils.clamp(camDist * (1 + e.deltaY*0.001), CAM_MIN, CAM_MAX);
+},{ passive:false });
+
+/* Nearest country to a world-space point on the globe surface */
+function countryAtPoint(worldPoint){
+  const local = globeGroup.worldToLocal(worldPoint.clone()).normalize();
+  let best = null, bestDot = Math.cos(8*Math.PI/180); // within ~8°
+  COUNTRIES.forEach(c=>{
+    const d = local.dot(c.vec3);
+    if(d > bestDot){ bestDot = d; best = c; }
+  });
+  return best;
+}
+
+let hoveredCountry = null;
+function handleHover(e){
+  raycaster.setFromCamera(pointerNdc, camera);
+  const hit = raycaster.intersectObject(globeMesh)[0];
+  const country = hit ? countryAtPoint(hit.point) : null;
+  if(country){
+    if(country !== hoveredCountry){
+      hoveredCountry = country;
+      /* seat + orient the highlight ring on the country */
+      const pos = latLngToVec3(country.lat, country.lng, GLOBE_R*1.005);
+      highlightRing.position.copy(pos);
+      highlightRing.lookAt(pos.clone().multiplyScalar(2));
+      highlightRing.material.opacity = 0.85;
+      showCountryTooltip(country, e);
+    }else{
+      moveTooltip(e);
+    }
+    globeCanvas.style.cursor = 'pointer';
+  }else{
+    if(hoveredCountry){ hoveredCountry = null; highlightRing.material.opacity = 0; hideTooltip(); }
+    globeCanvas.style.cursor = drag.active ? 'grabbing' : 'grab';
+  }
+}
+
+function handleClick(){
+  raycaster.setFromCamera(pointerNdc, camera);
+  /* arcs take priority over countries */
+  const arcHit = raycaster.intersectObjects(arcs.map(a=>a.line))[0];
+  if(arcHit){
+    const attack = state.attacks.get(arcHit.object.userData.attackId);
+    if(attack){ openAttackModal(attack); return; }
+  }
+  const hit = raycaster.intersectObject(globeMesh)[0];
+  if(hit){
+    const country = countryAtPoint(hit.point);
+    if(country) openCountryModal(country);
+  }
+}
+
+/* ############################################################
+   SECTION 8 — RENDER LOOP (arcs, ripples, markers, rotation)
+   ############################################################ */
+let lastFrame = performance.now();
+function renderLoop(now){
+  const dt = Math.min((now-lastFrame)/1000, 0.1);
+  lastFrame = now;
+
+  /* idle auto-rotation + drag inertia */
+  if(drag.autoRotate && !drag.active){
+    globeGroup.rotation.y += 0.06*dt;
+  }
+  if(!drag.active && (Math.abs(drag.velX) > 0.0001 || Math.abs(drag.velY) > 0.0001)){
+    globeGroup.rotation.y += drag.velY;
+    globeGroup.rotation.x = THREE.MathUtils.clamp(globeGroup.rotation.x + drag.velX, -1.1, 1.1);
+    drag.velX *= 0.94; drag.velY *= 0.94;      // momentum decay
+  }
+
+  /* smooth zoom toward target distance */
+  camera.position.z += (camDist - camera.position.z)*0.12;
+
+  /* animate arcs */
+  for(let i=arcs.length-1; i>=0; i--){
+    const a = arcs[i];
+    const raw = (now-a.born)/a.dur;
+    if(a.phase==='flying'){
+      const t = easeInOutCubic(Math.min(raw,1));
+      a.mat.uniforms.uHead.value = t;
+      a.head.position.copy(a.curve.getPoint(t));
+      a.head.material.opacity = 1;
+      if(raw >= 1){
+        a.phase = 'fading'; a.fadeStart = now;
+        spawnRipple(a.attack);
+      }
+    }else{
+      /* head runs off the end while the trail fades out */
+      const f = (now-a.fadeStart)/500;
+      a.mat.uniforms.uHead.value = 1 + TRAIL_LEN*Math.min(f,1);
+      a.mat.uniforms.uOpacity.value = Math.max(0, 1-f);
+      a.head.material.opacity = Math.max(0, 1-f*2);
+      if(f >= 1) removeArc(a);
+    }
+  }
+
+  /* animate ripples: scale 1x -> ~6x, fade, 600ms */
+  for(let i=ripples.length-1; i>=0; i--){
+    const r = ripples[i];
+    const p = (now-r.born)/600;
+    if(p >= 1){
+      globeGroup.remove(r.mesh); r.mesh.material.dispose();
+      ripples.splice(i,1); continue;
+    }
+    r.mesh.scale.setScalar(0.012 + 0.065*p);
+    r.mesh.material.opacity = 1-p;
+  }
+
+  updateMarkers(now);
+  drawMatrix(now);
+  drawDonut();
+  renderer.render(scene, camera);
+  requestAnimationFrame(renderLoop);
+}
+requestAnimationFrame(renderLoop);
+
+/* ############################################################
+   SECTION 9 — ATTACK SPAWNER (simulation heartbeat)
+   ############################################################ */
+function spawnAttack(){
+  const type = weightedPick(ATTACK_TYPES,'weight');
+  const src  = weightedPick(COUNTRIES,'atk');
+  let dst    = weightedPick(COUNTRIES,'tgt');
+  for(let i=0; i<5 && dst===src; i++) dst = weightedPick(COUNTRIES,'tgt');
+  if(dst===src) return;
+
+  const attack = {
+    id:state.nextId++,
+    type:type.name, color:type.color,
+    src, dst,
+    srcCity:pick(src.cities), dstCity:pick(dst.cities),
+    srcIp:makeIp(ATTACKER_IP_PREFIXES), dstIp:makeIp(TARGET_IP_PREFIXES),
+    srcIsp:pick(src.isps), dstIsp:pick(dst.isps),
+    severity:pickSeverity(type.name),
+    time:new Date(),
+  };
+  state.attacks.set(attack.id, attack);
+  if(state.attacks.size > 300){
+    state.attacks.delete(state.attacks.keys().next().value);
+  }
+
+  /* stats book-keeping */
+  state.typeCounts[type.name]++;
+  state.targetCounts[dst.code]++;
+  state.sourceCounts[src.code]++;
+  state.countryDaily[dst.code]++;
+  state.countryTypes[dst.code][type.name] = (state.countryTypes[dst.code][type.name]||0)+1;
+  state.countryOrigins[dst.code][src.code] = (state.countryOrigins[dst.code][src.code]||0)+1;
+  state.timestamps.push(performance.now());
+  if(state.timestamps.length > 500) state.timestamps.splice(0, state.timestamps.length-500);
+
+  /* global odometer: the world sees more attacks than we draw */
+  state.globalCounter.val += randInt(4,19);
+  gsap.to(state.globalCounter,{
+    display:state.globalCounter.val, duration:1.1, ease:'power2.out', overwrite:true,
+    onUpdate:()=>{ $('attackCounter').textContent = Math.round(state.globalCounter.display).toLocaleString('en-US'); }
+  });
+
+  spawnArc(attack);
+  addFeedRow(attack);
+}
+
+/* New attack every 1.5–3 seconds */
+function scheduleNext(){
+  if(!state.running) return;
+  setTimeout(()=>{ spawnAttack(); scheduleNext(); }, rand(1500,3000));
+}
+
+/* ############################################################
+   SECTION 10 — LIVE FEED (+ matrix rain background)
+   ############################################################ */
+const feedList = $('feedList');
+function addFeedRow(attack){
+  const row = document.createElement('div');
+  row.className = 'feed-row';
+  row.style.borderLeftColor = attack.color;
+  row.innerHTML =
+    `<span class="fr-time">${fmtTime(attack.time)}</span> | ` +
+    `<span style="color:${attack.color};font-weight:700">${attack.type}</span> | ` +
+    `${attack.srcCity}, ${attack.src.code} <span class="fr-arrow">→</span> ${attack.dstCity}, ${attack.dst.code}`;
+  row.addEventListener('click',()=>openAttackModal(attack));
+  feedList.prepend(row);
+  gsap.from(row,{ y:-14, opacity:0, duration:0.35, ease:'power2.out' });
+  while(feedList.children.length > 50) feedList.lastChild.remove();
+}
+
+const matrixCanvas = $('matrixCanvas');
+const matCtx = matrixCanvas.getContext('2d');
+const MATRIX_CHARS = 'アイウエオ01<>/#$%&+=?';
+let matDrops = [], lastMat = 0;
+function resizeMatrix(){
+  const r = matrixCanvas.parentElement.getBoundingClientRect();
+  matrixCanvas.width = r.width; matrixCanvas.height = r.height;
+  matDrops = Array(Math.ceil(r.width/14)).fill(0).map(()=>rand(0,r.height/14));
+}
+function drawMatrix(now){
+  if(now-lastMat < 80) return;
+  lastMat = now;
+  matCtx.fillStyle = 'rgba(8,11,20,0.18)';
+  matCtx.fillRect(0,0,matrixCanvas.width,matrixCanvas.height);
+  matCtx.fillStyle = '#06b6d4';
+  matCtx.font = '12px "JetBrains Mono", monospace';
+  matDrops.forEach((y,i)=>{
+    matCtx.fillText(MATRIX_CHARS[randInt(0,MATRIX_CHARS.length-1)], i*14, y*14);
+    matDrops[i] = (y*14 > matrixCanvas.height && Math.random()>0.97) ? 0 : y+1;
+  });
+}
+
+/* ############################################################
+   SECTION 11 — DONUT CHART (pure canvas)
+   ############################################################ */
+const donutCanvas = $('donutCanvas');
+const donutCtx = donutCanvas.getContext('2d');
+const donutState = ATTACK_TYPES.map(t=>({ name:t.name, color:t.color, frac:t.weight/100 }));
+
+const legendCounts = {};
+(function buildLegend(){
+  const el = $('donutLegend');
+  ATTACK_TYPES.forEach(t=>{
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.innerHTML = `<span class="legend-dot" style="background:${t.color}"></span>
+      <span class="lg-name">${t.name}</span><span class="lg-count">0</span>`;
+    el.appendChild(row);
+    legendCounts[t.name] = row.querySelector('.lg-count');
+  });
+})();
+
+function retargetDonut(){
+  const total = Object.values(state.typeCounts).reduce((a,b)=>a+b,0) || 1;
+  donutState.forEach(d=>{
+    gsap.to(d,{ frac:state.typeCounts[d.name]/total, duration:1.2, ease:'power2.inOut', overwrite:true });
+    legendCounts[d.name].textContent = state.typeCounts[d.name].toLocaleString('en-US');
+  });
+  $('donutTotal').textContent = total.toLocaleString('en-US');
+}
+setInterval(retargetDonut, 5000);
+
+function drawDonut(){
+  const W = donutCanvas.width, cx = W/2, cy = W/2;
+  const rOut = W*0.44, lw = W*0.13;
+  donutCtx.clearRect(0,0,W,W);
+  let ang = -Math.PI/2;
+  const gap = 0.035;
+  donutState.forEach(d=>{
+    const sweep = Math.max(0, d.frac*Math.PI*2 - gap);
+    donutCtx.beginPath();
+    donutCtx.arc(cx,cy,rOut-lw/2, ang+gap/2, ang+gap/2+sweep);
+    donutCtx.strokeStyle = d.color;
+    donutCtx.lineWidth = lw;
+    donutCtx.stroke();
+    ang += d.frac*Math.PI*2;
+  });
+}
+
+/* ############################################################
+   SECTION 12 — BAR CHARTS (top targets / top origins)
+   ############################################################ */
+function makeBarChart(containerId){
+  const container = $(containerId);
+  const rows = {};
+  return function update(counts){
+    const top = COUNTRIES.map(c=>({ c, n:counts[c.code]||0 }))
+      .sort((a,b)=>b.n-a.n).slice(0,5);
+    const max = top[0]?.n || 1;
+    top.forEach(({c,n})=>{
+      let r = rows[c.code];
+      if(!r){
+        const el = document.createElement('div');
+        el.className = 'bar-row';
+        el.innerHTML = `<span class="br-label">${c.flag} ${c.name}</span>
+          <span class="br-track"><span class="br-fill"></span></span>
+          <span class="br-count">0</span>`;
+        rows[c.code] = r = { el, fill:el.querySelector('.br-fill'), count:el.querySelector('.br-count') };
+      }
+      container.appendChild(r.el);
+      r.fill.style.transform = `scaleX(${Math.max(0.03, n/max)})`;
+      r.count.textContent = n.toLocaleString('en-US');
+    });
+    const keep = new Set(top.map(t=>t.c.code));
+    Object.keys(rows).forEach(code=>{
+      if(!keep.has(code)){ rows[code].el.remove(); delete rows[code]; }
+    });
+  };
+}
+const updateTargetBars = makeBarChart('targetBars');
+const updateSourceBars = makeBarChart('sourceBars');
+setInterval(()=>{ updateTargetBars(state.targetCounts); updateSourceBars(state.sourceCounts); }, 2500);
+
+/* ############################################################
+   SECTION 13 — TICKER
+   ############################################################ */
+(function buildTicker(){
+  const half = HEADLINES.map(h=>`<span class="ticker-item">${h}</span>`).join('');
+  $('tickerTrack').innerHTML = half + half;   // duplicated for seamless -50% loop
+})();
+
+/* ############################################################
+   SECTION 14 — TOOLTIP
+   ############################################################ */
+const tooltip = $('tooltip');
+function showCountryTooltip(c,e){
+  const types = Object.entries(state.countryTypes[c.code]).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  tooltip.innerHTML =
+    `<div class="tt-name">${c.flag} ${c.name}</div>
+     <div class="tt-row"><span>Attacks today</span><b>${state.countryDaily[c.code].toLocaleString('en-US')}</b></div>` +
+    (types.length
+      ? types.map(([t,n])=>`<div class="tt-row"><span>${t}</span><b>${n}</b></div>`).join('')
+      : `<div class="tt-row"><span>No live hits yet this session</span></div>`);
+  tooltip.classList.add('show');
+  moveTooltip(e);
+}
+function moveTooltip(e){
+  tooltip.style.left = Math.min(e.clientX+14, window.innerWidth-200)+'px';
+  tooltip.style.top  = Math.min(e.clientY+14, window.innerHeight-130)+'px';
+}
+function hideTooltip(){ tooltip.classList.remove('show'); }
+
+/* ############################################################
+   SECTION 15 — MODAL (attack detail / country intelligence)
+   ############################################################ */
+const modal = $('modal'), backdrop = $('backdrop');
+let modalOpen = false;
+
+function setBadge(text,color){
+  const b = $('mBadge');
+  b.textContent = text;
+  b.style.color = color; b.style.borderColor = color; b.style.background = color+'14';
+}
+function openModalShell(){
+  drawSparkline();
+  backdrop.classList.add('open');
+  modal.setAttribute('aria-hidden','false');
+  gsap.fromTo(modal,{ xPercent:modalOpen?0:105 },{ xPercent:0, duration:0.45, ease:'power3.out', overwrite:true });
+  modalOpen = true;
+}
+function closeModal(){
+  if(!modalOpen) return;
+  gsap.to(modal,{ xPercent:105, duration:0.35, ease:'power2.in' });
+  backdrop.classList.remove('open');
+  modal.setAttribute('aria-hidden','true');
+  modalOpen = false;
+}
+$('modalClose').addEventListener('click', closeModal);
+backdrop.addEventListener('click', closeModal);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+/* Attack detail — from arc click or feed click */
+function openAttackModal(attack){
+  $('mTitle').textContent = attack.type;
+  $('mTitle').style.color = attack.color;
+  setBadge(attack.severity.toUpperCase(), SEVERITY_COLORS[attack.severity]);
+  $('modalBody').innerHTML = `
+    <div class="modal-block"><h4>Source</h4>
+      <div class="kv"><span class="k">IP Address</span><span class="v">${attack.srcIp}</span></div>
+      <div class="kv"><span class="k">Location</span><span class="v">${attack.srcCity}, ${attack.src.name}</span></div>
+      <div class="kv"><span class="k">ISP / ASN</span><span class="v">${attack.srcIsp}</span></div>
+    </div>
+    <div class="modal-block"><h4>Target</h4>
+      <div class="kv"><span class="k">IP Address</span><span class="v">${attack.dstIp}</span></div>
+      <div class="kv"><span class="k">Location</span><span class="v">${attack.dstCity}, ${attack.dst.name}</span></div>
+      <div class="kv"><span class="k">ISP / ASN</span><span class="v">${attack.dstIsp}</span></div>
+    </div>
+    <div class="modal-block"><h4>Attack Vector</h4>
+      <p class="modal-desc">${VECTOR_INFO[attack.type].desc}</p>
+    </div>
+    <div class="modal-block"><h4>Recommended Mitigation</h4>
+      <ul class="modal-mit">${VECTOR_INFO[attack.type].mit.map(m=>`<li>${m}</li>`).join('')}</ul>
+    </div>`;
+  $('mTime').textContent = 'Observed ' + attack.time.toISOString().replace('T',' ').slice(0,19) + ' UTC';
+  openModalShell();
+}
+
+/* Country intelligence — from clicking a country on the globe */
+function openCountryModal(c){
+  const daily = state.countryDaily[c.code];
+  const level = daily>30000 ? ['CRITICAL EXPOSURE','#ff3b3b']
+              : daily>15000 ? ['HIGH EXPOSURE','#ff8c00']
+              : daily>5000  ? ['ELEVATED','#eab308'] : ['MODERATE','#22c55e'];
+  const types = Object.entries(state.countryTypes[c.code]).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  const typeColor = name => (ATTACK_TYPES.find(t=>t.name===name)||{}).color || '#64748b';
+  const origins = Object.entries(state.countryOrigins[c.code]).sort((a,b)=>b[1]-a[1]).slice(0,3)
+    .map(([code,n])=>{ const cc = COUNTRIES.find(x=>x.code===code); return { cc, n }; });
+
+  $('mTitle').textContent = `${c.flag} ${c.name}`;
+  $('mTitle').style.color = 'var(--text)';
+  setBadge(level[0], level[1]);
+  $('modalBody').innerHTML = `
+    <div class="modal-block"><h4>Country Overview</h4>
+      <div class="kv"><span class="k">Attacks today (sim)</span><span class="v">${daily.toLocaleString('en-US')}</span></div>
+      <div class="kv"><span class="k">Hits this session</span><span class="v">${(state.targetCounts[c.code]||0).toLocaleString('en-US')}</span></div>
+      <div class="kv"><span class="k">Outbound this session</span><span class="v">${(state.sourceCounts[c.code]||0).toLocaleString('en-US')}</span></div>
+      <div class="kv"><span class="k">Coordinates</span><span class="v">${c.lat.toFixed(2)}, ${c.lng.toFixed(2)}</span></div>
+    </div>
+    <div class="modal-block"><h4>Top Attack Types Received</h4>
+      ${ types.length
+         ? types.map(([t,n])=>`<div class="kv"><span class="k" style="color:${typeColor(t)}">${t}</span><span class="v">${n}</span></div>`).join('')
+         : '<p class="modal-desc">No live hits recorded yet this session.</p>' }
+    </div>
+    <div class="modal-block"><h4>Top Attacker Origins</h4>
+      ${ origins.length
+         ? origins.map(o=>`<div class="kv"><span class="k">${o.cc.flag} ${o.cc.name}</span><span class="v">${o.n}</span></div>`).join('')
+         : '<p class="modal-desc">No inbound sources recorded yet this session.</p>' }
+    </div>
+    <div class="modal-block"><h4>Monitored Cities</h4>
+      <p class="modal-desc">${c.cities.join(' · ')}</p>
+    </div>`;
+  $('mTime').textContent = 'Snapshot ' + new Date().toISOString().replace('T',' ').slice(0,19) + ' UTC';
+  openModalShell();
+}
+
+/* Sparkline: attacks-per-2s buckets over the last 60 seconds */
+function drawSparkline(){
+  const cv = $('sparkCanvas'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, now = performance.now();
+  const buckets = new Array(30).fill(0);
+  state.timestamps.forEach(t=>{
+    const age = now-t;
+    if(age < 60000) buckets[29-Math.floor(age/2000)]++;
+  });
+  const max = Math.max(...buckets,1);
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath();
+  buckets.forEach((v,i)=>{
+    const x = i/29*(W-8)+4, y = H-6-(v/max)*(H-16);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.lineTo(W-4,H-4); ctx.lineTo(4,H-4); ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'rgba(6,182,212,.30)'); grad.addColorStop(1,'rgba(6,182,212,0)');
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+/* ############################################################
+   SECTION 16 — CLOCK + RESIZE
+   ############################################################ */
+function tickClock(){ $('clock').textContent = fmtTime(new Date()); }
+tickClock();
+setInterval(tickClock, 1000);
+
+function handleResize(){
+  const r = globePanel.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width/Math.max(1,r.height);
+  camera.updateProjectionMatrix();
+  resizeMatrix();
+}
+window.addEventListener('resize', debounce(handleResize, 150));
+handleResize();
+
+/* ############################################################
+   SECTION 17 — ENTRANCE ANIMATION + SIMULATION START
+   header → globe fades/scales in → panels slide in → feed
+   begins. ~2 seconds total.
+   ############################################################ */
+gsap.registerPlugin(ScrollTrigger);
+
+globeGroup.scale.setScalar(0.8);
+
+const intro = gsap.timeline({ defaults:{ ease:'power3.out' } });
+intro
+  .from('#header',    { y:-56, opacity:0, duration:0.5 })
+  .from('.scanbar',   { opacity:0, duration:0.3 }, '-=0.2')
+  .add(()=>{ /* globe: fade to full opacity while scaling up + spinning */
+    gsap.to(globeMesh.material,{ opacity:1, duration:0.9, ease:'power2.out' });
+    gsap.to(atmosphere.material.uniforms.uStrength,{ value:1, duration:1.1, ease:'power2.out' });
+    gsap.to(globeGroup.scale,{ x:1, y:1, z:1, duration:0.9, ease:'power3.out' });
+  }, '-=0.1')
+  .from('#feedPanel', { x:-40, opacity:0, duration:0.5 }, '-=0.5')
+  .from('#statsPanel',{ x:40,  opacity:0, duration:0.5 }, '<')
+  .from('#ticker',    { y:40,  opacity:0, duration:0.4 }, '-=0.25')
+  .add(()=>{
+    /* counters roll up from 0, then the simulation goes live */
+    const boot = { v:0 };
+    gsap.to(boot,{ v:state.globalCounter.val, duration:1.4, ease:'power2.out',
+      onUpdate:()=>{ $('attackCounter').textContent = Math.round(boot.v).toLocaleString('en-US'); } });
+    retargetDonut();
+    updateTargetBars(state.targetCounts);
+    updateSourceBars(state.sourceCounts);
+    state.running = true;
+    spawnAttack(); spawnAttack(); spawnAttack();  // immediate activity
+    scheduleNext();
+    document.body.classList.add('ready');         // enables panel hover transitions
+  }, '-=0.1');
+</script>
+</body>
+</html>
