@@ -6,6 +6,8 @@ feed and counters alongside.
 
 The attack data is simulated in the browser; no real threat feed is called.
 
+**Live site:** https://threat-pulse-mu.vercel.app
+
 ## Run
 
 Open `index.html` in a browser, or serve the folder with any static host. It loads
